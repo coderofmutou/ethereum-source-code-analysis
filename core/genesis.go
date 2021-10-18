@@ -156,13 +156,16 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 
 	// Just commit the new block if there is no stored genesis block.
 	stored := GetCanonicalHash(db, 0)
+	// 获取哈希
 	if (stored == common.Hash{}) {
 		if genesis == nil {
 			log.Info("Writing default main-net genesis block")
+			// 如果genesis为空，这里采用默认的genesis，使用的是主网络
 			genesis = DefaultGenesisBlock()
 		} else {
 			log.Info("Writing custom genesis block")
 		}
+		// 写入数据库
 		block, err := genesis.Commit(db)
 		return genesis.Config, block.Hash(), err
 	}
@@ -177,7 +180,9 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 	}
 
 	// Get the existing chain configuration.
+	// 获取当前存在的区块链的genesis配置
 	newcfg := genesis.configOrDefault(stored)
+	// 获取当前区块链的配置
 	storedcfg, err := GetChainConfig(db, stored)
 	if err != nil {
 		if err == ErrChainConfigNotFound {
@@ -257,6 +262,7 @@ func (g *Genesis) ToBlock() (*types.Block, *state.StateDB) {
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
+// 将创世区块写入数据库
 func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	block, statedb := g.ToBlock()
 	if block.Number().Sign() != 0 {
