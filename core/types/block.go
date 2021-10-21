@@ -85,6 +85,7 @@ type Header struct {
 	Time        *big.Int       `json:"timestamp"        gencodec:"required"`
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	// 以太坊共识算法ethash与比特币共识POW所不同的一个关键变量
+	// mixDigest 是在挖矿过程中计算出来，它的作用就是作为矿工在进行消耗内存进行挖矿的证明
 	MixDigest   common.Hash    `json:"mixHash"          gencodec:"required"`
 	Nonce       BlockNonce     `json:"nonce"            gencodec:"required"`
 }

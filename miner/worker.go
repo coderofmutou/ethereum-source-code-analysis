@@ -89,14 +89,18 @@ type Result struct {
 // worker is the main object which takes care of applying messages to the new state
 type worker struct {
 	config *params.ChainConfig
-	engine consensus.Engine
+	engine consensus.Engine // 共识引擎
 
 	mu sync.Mutex
 
 	// update loop
+	// worker 用 mux 向外面发布通知，表示自己已经挖到新的区块
 	mux          *event.TypeMux
+	// 从后台接受 tx 的 channel
 	txCh         chan core.TxPreEvent
+	// 从后台接受订阅事件的 channel
 	txSub        event.Subscription
+	// 从后台接受 block 的 channel
 	chainHeadCh  chan core.ChainHeadEvent
 	chainHeadSub event.Subscription
 	chainSideCh  chan core.ChainSideEvent
@@ -104,6 +108,7 @@ type worker struct {
 	wg           sync.WaitGroup
 
 	agents map[Agent]struct{}
+	// 从共识引擎中接受挖矿的结果
 	recv   chan *Result
 
 	eth     Backend
@@ -127,6 +132,7 @@ type worker struct {
 	atWork int32
 }
 
+// 创建一个新的 worker 处理器
 func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase common.Address, eth Backend, mux *event.TypeMux) *worker {
 	worker := &worker{
 		config:         config,
@@ -150,9 +156,11 @@ func newWorker(config *params.ChainConfig, engine consensus.Engine, coinbase com
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+	// 等待上面几个 channel 接受的数据进行更新处理
 	go worker.update()
-
+	// 等待 agent 挖到新的区块
 	go worker.wait()
+	// 尝试启动新的挖掘工作
 	worker.commitNewWork()
 
 	return worker
@@ -386,6 +394,7 @@ func (self *worker) makeCurrent(parent *types.Block, header *types.Header) error
 	return nil
 }
 
+// 区块挖掘过程
 func (self *worker) commitNewWork() {
 	self.mu.Lock()
 	defer self.mu.Unlock()
@@ -395,6 +404,7 @@ func (self *worker) commitNewWork() {
 	defer self.currentMu.Unlock()
 
 	tstart := time.Now()
+	// 1 获取主链上的最新区块
 	parent := self.chain.CurrentBlock()
 
 	tstamp := tstart.Unix()
@@ -409,6 +419,7 @@ func (self *worker) commitNewWork() {
 	}
 
 	num := parent.Number()
+	// 区块头定义与赋值
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num.Add(num, common.Big1),
@@ -421,6 +432,7 @@ func (self *worker) commitNewWork() {
 	if atomic.LoadInt32(&self.mining) == 1 {
 		header.Coinbase = self.coinbase
 	}
+	// 计算 block 的难度值
 	if err := self.engine.Prepare(self.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
@@ -454,7 +466,13 @@ func (self *worker) commitNewWork() {
 		log.Error("Failed to fetch pending transactions", "err", err)
 		return
 	}
+	// 根据随机数和 gas price 生成新的交易
+	/*
+		矿工一般选择 price 更高的交易优先执行，对于交易发起者来说
+		为了让自己的交易更快的被处理，可以设置更高的 gasPrice
+	 */
 	txs := types.NewTransactionsByPriceAndNonce(self.current.signer, pending)
+	// 提交，执行交易
 	work.commitTransactions(self.mux, txs, self.chain, self.coinbase)
 
 	// compute uncles for the new block.
@@ -480,6 +498,7 @@ func (self *worker) commitNewWork() {
 		delete(self.possibleUncles, hash)
 	}
 	// Create the new block to seal with the consensus engine
+	// 调用共识引擎的 Finalize 函数，创建一个新的区块
 	if work.Block, err = self.engine.Finalize(self.chain, header, work.state, work.txs, uncles, work.receipts); err != nil {
 		log.Error("Failed to finalize block for sealing", "err", err)
 		return
@@ -489,6 +508,7 @@ func (self *worker) commitNewWork() {
 		log.Info("Commit new mining work", "number", work.Block.Number(), "txs", work.tcount, "uncles", len(uncles), "elapsed", common.PrettyDuration(time.Since(tstart)))
 		self.unconfirmed.Shift(work.Block.NumberU64() - 1)
 	}
+	// 发送工作任务给 agent，让 agent 开始挖矿
 	self.push(work)
 }
 

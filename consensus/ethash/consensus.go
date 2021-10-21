@@ -496,11 +496,13 @@ func (ethash *Ethash) VerifySeal(chain consensus.ChainReader, header *types.Head
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the ethash protocol. The changes are done inline.
+// 计算 block 的 Difficulty
 func (ethash *Ethash) Prepare(chain consensus.ChainReader, header *types.Header) error {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+	// 计算难度值
 	header.Difficulty = CalcDifficulty(chain.Config(), header.Time.Uint64(), parent)
 
 	return nil
@@ -514,6 +516,7 @@ func (ethash *Ethash) Finalize(chain consensus.ChainReader, header *types.Header
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 
 	// Header seems complete, assemble into a block and return
+	// 将生成的交易打包到区块
 	return types.NewBlock(header, txs, uncles, receipts), nil
 }
 
