@@ -37,13 +37,16 @@ func newTestLDB() (*ethdb.LDBDatabase, func()) {
 	if err != nil {
 		panic("failed to create test database: " + err.Error())
 	}
-
+	// 返回一个对象以及关闭操作
 	return db, func() {
 		db.Close()
+		// 关闭数据库
+		// 移除目录
 		os.RemoveAll(dirname)
 	}
 }
 
+// 测试数据源
 var test_values = []string{"", "a", "1251", "\x00123\x00"}
 
 func TestLDB_PutGet(t *testing.T) {
@@ -135,6 +138,7 @@ func TestMemoryDB_ParallelPutGet(t *testing.T) {
 	testParallelPutGet(db, t)
 }
 
+// 并发操作数据
 func testParallelPutGet(db ethdb.Database, t *testing.T) {
 	const n = 8
 	var pending sync.WaitGroup

@@ -28,15 +28,17 @@ import (
  */
 type MemDatabase struct {
 	db   map[string][]byte
-	lock sync.RWMutex
+	lock sync.RWMutex // 锁，对多线程资源进行保护
 }
 
+// 初始化 memdb 对象
 func NewMemDatabase() (*MemDatabase, error) {
 	return &MemDatabase{
 		db: make(map[string][]byte),
 	}, nil
 }
 
+// 写入
 func (db *MemDatabase) Put(key []byte, value []byte) error {
 	db.lock.Lock()
 	defer db.lock.Unlock()
@@ -96,11 +98,13 @@ func (db *MemDatabase) NewBatch() Batch {
 	return &memBatch{db: db}
 }
 
+// 批量操作 k,v 一对一
 type kv struct{ k, v []byte }
 
 type memBatch struct {
 	db     *MemDatabase
 	writes []kv
+	// 此次操作的数据条数
 	size   int
 }
 

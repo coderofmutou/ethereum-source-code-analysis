@@ -35,10 +35,14 @@ import (
 
 var OpenFileLimit = 64
 
+// ldb 数据对象
 type LDBDatabase struct {
+	// 文件名
 	fn string      // filename for reporting
+	// db 实例
 	db *leveldb.DB // LevelDB instance
 
+	// 相关操作
 	getTimer       gometrics.Timer // Timer for measuring the database get request counts and latencies
 	putTimer       gometrics.Timer // Timer for measuring the database put request counts and latencies
 	delTimer       gometrics.Timer // Timer for measuring the database delete request counts and latencies
@@ -48,21 +52,24 @@ type LDBDatabase struct {
 	compTimeMeter  gometrics.Meter // Meter for measuring the total time spent in database compaction
 	compReadMeter  gometrics.Meter // Meter for measuring the data read during compaction
 	compWriteMeter gometrics.Meter // Meter for measuring the data written during compaction
-
+	// 互斥锁，起保护作用
 	quitLock sync.Mutex      // Mutex protecting the quit channel access
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
-
+	// 日志接口
 	log log.Logger // Contextual logger tracking the database path
 }
 
 // NewLDBDatabase returns a LevelDB wrapped object.
+// 新建 level DB 对象
 func NewLDBDatabase(file string, cache int, handles int) (*LDBDatabase, error) {
 	logger := log.New("database", file)
 
 	// Ensure we have some minimal caching and file guarantees
+	// 确保最小缓存数据
 	if cache < 16 {
 		cache = 16
 	}
+	// handle 定义打开文件缓存的容量
 	if handles < 16 {
 		handles = 16
 	}
@@ -82,6 +89,7 @@ func NewLDBDatabase(file string, cache int, handles int) (*LDBDatabase, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 返回 DB 对象
 	return &LDBDatabase{
 		fn:  file,
 		db:  db,
@@ -174,8 +182,11 @@ func (db *LDBDatabase) LDB() *leveldb.DB {
 }
 
 // Meter configures the database metrics collectors and
+// 初始化 meter 参数
+// geth --metrics: 可以启动性能指标收集和报告
 func (db *LDBDatabase) Meter(prefix string) {
 	// Short circuit metering if the metrics system is disabled
+	// 检查一下是否已经启动了该功能
 	if !metrics.Enabled {
 		return
 	}
@@ -195,6 +206,7 @@ func (db *LDBDatabase) Meter(prefix string) {
 	db.quitChan = make(chan chan error)
 	db.quitLock.Unlock()
 
+	// 另起一个协程，调用db.meter，每 3 秒获取一次 levedb 的内部计数器，传入 metrics
 	go db.meter(3 * time.Second)
 }
 
@@ -209,6 +221,7 @@ func (db *LDBDatabase) Meter(prefix string) {
 //      1   |         85 |     109.27913 |      28.09293 |     213.92493 |     214.26294
 //      2   |        523 |    1000.37159 |       7.26059 |      66.86342 |      66.77884
 //      3   |        570 |    1113.18458 |       0.00000 |       0.00000 |       0.00000
+// 统计数据(主要是 TPS)
 func (db *LDBDatabase) meter(refresh time.Duration) {
 	// Create the counters to store current and previous values
 	counters := make([][]float64, 2)
@@ -216,6 +229,7 @@ func (db *LDBDatabase) meter(refresh time.Duration) {
 		counters[i] = make([]float64, 3)
 	}
 	// Iterate ad infinitum and collect the stats
+	// 一直在迭代收集统计数据
 	for i := 1; ; i++ {
 		// Retrieve the database stats
 		stats, err := db.db.GetProperty("leveldb.stats")
