@@ -27,6 +27,7 @@ import (
 
 // ChainReader defines a small collection of methods needed to access the local
 // blockchain during header and/or uncle verification.
+// 接口：对本地区块链相关操作的方法的集合
 type ChainReader interface {
 	// Config retrieves the blockchain's chain configuration.
 	Config() *params.ChainConfig
@@ -48,6 +49,7 @@ type ChainReader interface {
 }
 
 // Engine is an algorithm agnostic consensus engine.
+// 以太坊共识引擎 ethash 算法核心接口
 type Engine interface {
 	// Author retrieves the Ethereum address of the account that minted the given
 	// block, which may be different from the header's coinbase if a consensus
@@ -86,6 +88,7 @@ type Engine interface {
 
 	// Seal generates a new block for the given input block with the local miner's
 	// seal place on top.
+	// 通过给定的区块生成一个新的区块
 	Seal(chain ChainReader, block *types.Block, stop <-chan struct{}) (*types.Block, error)
 
 	// APIs returns the RPC APIs this consensus engine provides.

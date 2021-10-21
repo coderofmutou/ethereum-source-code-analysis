@@ -226,8 +226,9 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 }
 
 // ToBlock creates the block and state of a genesis specification.
+// 使用 genesis 数据加载到内存中
 func (g *Genesis) ToBlock() (*types.Block, *state.StateDB) {
-	db, _ := ethdb.NewMemDatabase()
+	db, _ := ethdb.NewMemDatabase() // 内存数据库
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(db))
 	for addr, account := range g.Alloc {
 		statedb.AddBalance(addr, account.Balance)
@@ -257,6 +258,7 @@ func (g *Genesis) ToBlock() (*types.Block, *state.StateDB) {
 	if g.Difficulty == nil {
 		head.Difficulty = params.GenesisDifficulty
 	}
+	// 创建一个新的区块并返回
 	return types.NewBlock(head, nil, nil, nil), statedb
 }
 

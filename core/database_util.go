@@ -574,6 +574,7 @@ func WriteBlockChainVersion(db ethdb.Putter, vsn int) {
 }
 
 // WriteChainConfig writes the chain config settings to the database.
+// 写入本地
 func WriteChainConfig(db ethdb.Putter, hash common.Hash, cfg *params.ChainConfig) error {
 	// short circuit and ignore if nil config. GetChainConfig
 	// will return a default.
