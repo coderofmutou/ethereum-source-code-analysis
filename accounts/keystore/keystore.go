@@ -268,6 +268,7 @@ func (ks *KeyStore) SignHash(a accounts.Account, hash []byte) ([]byte, error) {
 }
 
 // SignTx signs the given transaction with the requested account.
+// 交易签名
 func (ks *KeyStore) SignTx(a accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
 	// Look up the key to sign with and abort if it cannot be found
 	ks.mu.RLock()
@@ -298,7 +299,9 @@ func (ks *KeyStore) SignHashWithPassphrase(a accounts.Account, passphrase string
 
 // SignTxWithPassphrase signs the transaction if the private key matching the
 // given address can be decrypted with the given passphrase.
+// 如果匹配的地址私钥可以使用给定的密码解密，则对交易进行签名
 func (ks *KeyStore) SignTxWithPassphrase(a accounts.Account, passphrase string, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error) {
+	// 解锁账户
 	_, key, err := ks.getDecryptedKey(a, passphrase)
 	if err != nil {
 		return nil, err
@@ -306,9 +309,11 @@ func (ks *KeyStore) SignTxWithPassphrase(a accounts.Account, passphrase string, 
 	defer zeroKey(key.PrivateKey)
 
 	// Depending on the presence of the chain ID, sign with EIP155 or homestead
+	// 如果要集成 EIP155 规范，需要传递 chainID，也就是 --networkkid
 	if chainID != nil {
 		return types.SignTx(tx, types.NewEIP155Signer(chainID), key.PrivateKey)
 	}
+	// 交易签名
 	return types.SignTx(tx, types.HomesteadSigner{}, key.PrivateKey)
 }
 

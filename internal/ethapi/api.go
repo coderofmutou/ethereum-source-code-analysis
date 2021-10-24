@@ -1061,6 +1061,7 @@ func (s *PublicTransactionPoolAPI) sign(addr common.Address, tx *types.Transacti
 }
 
 // SendTxArgs represents the arguments to sumbit a new transaction into the transaction pool.
+// 发起交易所需要的参数
 type SendTxArgs struct {
 	From     common.Address  `json:"from"`
 	To       *common.Address `json:"to"`
@@ -1096,6 +1097,7 @@ func (args *SendTxArgs) setDefaults(ctx context.Context, b Backend) error {
 	return nil
 }
 
+// 创建交易
 func (args *SendTxArgs) toTransaction() *types.Transaction {
 	if args.To == nil {
 		return types.NewContractCreation(uint64(*args.Nonce), (*big.Int)(args.Value), (*big.Int)(args.Gas), (*big.Int)(args.GasPrice), args.Data)
@@ -1124,11 +1126,15 @@ func submitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 
 // SendTransaction creates a transaction for the given argument, sign it and submit it to the
 // transaction pool.
+// 通过给定的参数创建一个新的交易并且提交到 txpool
+// 用户通过 JSON RPC 发起的交易 web3.eth,sendTransaction(...)
 func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args SendTxArgs) (common.Hash, error) {
 
 	// Look up the wallet containing the requested signer
+	// 查找一个包含了所需要的签名的钱包地址
 	account := accounts.Account{Address: args.From}
 
+	// 通过账号获取对应的钱包结构
 	wallet, err := s.b.AccountManager().Find(account)
 	if err != nil {
 		return common.Hash{}, err
@@ -1142,16 +1148,20 @@ func (s *PublicTransactionPoolAPI) SendTransaction(ctx context.Context, args Sen
 	}
 
 	// Set some sanity defaults and terminate on failure
+	// 设置一些默认值
 	if err := args.setDefaults(ctx, s.b); err != nil {
 		return common.Hash{}, err
 	}
 	// Assemble the transaction and sign with the wallet
+	// 通过 wallet 和签名创建交易
 	tx := args.toTransaction()
 
+	// chainID: 区别区块链网络
 	var chainID *big.Int
 	if config := s.b.ChainConfig(); config.IsEIP155(s.b.CurrentBlock().Number()) {
 		chainID = config.ChainId
 	}
+	// 对交易进行签名
 	signed, err := wallet.SignTx(account, tx, chainID)
 	if err != nil {
 		return common.Hash{}, err

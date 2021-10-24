@@ -46,28 +46,37 @@ func deriveSigner(V *big.Int) Signer {
 	}
 }
 
+// 交易结构
 type Transaction struct {
+	// 交易的数据信息
 	data txdata
 	// caches
+	// 相关缓存
 	hash atomic.Value
 	size atomic.Value
 	from atomic.Value
 }
 
+// 具体交易数据
 type txdata struct {
+	// 发起者所发起的交易总量
 	AccountNonce uint64          `json:"nonce"    gencodec:"required"`
 	Price        *big.Int        `json:"gasPrice" gencodec:"required"`
 	GasLimit     *big.Int        `json:"gas"      gencodec:"required"`
+	// 接收者地址，如果为空代表的是创建合约的交易
 	Recipient    *common.Address `json:"to"       rlp:"nil"` // nil means contract creation
+	// 此次交易所转移的以太币的数量
 	Amount       *big.Int        `json:"value"    gencodec:"required"`
+	// 其他数据
 	Payload      []byte          `json:"input"    gencodec:"required"`
 
-	// Signature values
+	// Signature values 交易签名的数据
 	V *big.Int `json:"v" gencodec:"required"`
 	R *big.Int `json:"r" gencodec:"required"`
 	S *big.Int `json:"s" gencodec:"required"`
 
 	// This is only used when marshaling to JSON.
+	// 非 RLP 编码的哈希
 	Hash *common.Hash `json:"hash" rlp:"-"`
 }
 
@@ -82,14 +91,17 @@ type txdataMarshaling struct {
 	S            *hexutil.Big
 }
 
+// 创建新的交易
 func NewTransaction(nonce uint64, to common.Address, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
 	return newTransaction(nonce, &to, amount, gasLimit, gasPrice, data)
 }
 
+// 创建一个新建合约的交易，和普通交易的区别在于目标地址为空
 func NewContractCreation(nonce uint64, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
 	return newTransaction(nonce, nil, amount, gasLimit, gasPrice, data)
 }
 
+// 创建交易的函数
 func newTransaction(nonce uint64, to *common.Address, amount, gasLimit, gasPrice *big.Int, data []byte) *Transaction {
 	if len(data) > 0 {
 		data = common.CopyBytes(data)
@@ -242,12 +254,15 @@ func (tx *Transaction) AsMessage(s Signer) (Message, error) {
 
 // WithSignature returns a new transaction with the given signature.
 // This signature needs to be formatted as described in the yellow paper (v+27).
+// 将签名数据填充到交易中
 func (tx *Transaction) WithSignature(signer Signer, sig []byte) (*Transaction, error) {
+	// 得到交易的签名数据之后，通过 SignatureValues 转换为 big.Int，再进行填充
 	r, s, v, err := signer.SignatureValues(tx, sig)
 	if err != nil {
 		return nil, err
 	}
 	cpy := &Transaction{data: tx.data}
+	// 签名数据填充
 	cpy.data.R, cpy.data.S, cpy.data.V = r, s, v
 	return cpy, nil
 }
