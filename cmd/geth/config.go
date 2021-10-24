@@ -99,6 +99,7 @@ func loadConfig(file string, cfg *gethConfig) error {
 	return err
 }
 
+// 默认节点配置
 func defaultNodeConfig() node.Config {
 	cfg := node.DefaultConfig
 	cfg.Name = clientIdentifier
@@ -109,8 +110,10 @@ func defaultNodeConfig() node.Config {
 	return cfg
 }
 
+// 根据命令行参数以及一些特殊的配置来创建一个 node
 func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 	// Load defaults.
+	// 加载默认配置
 	cfg := gethConfig{
 		Eth:       eth.DefaultConfig,
 		Shh:       whisper.DefaultConfig,
@@ -127,16 +130,20 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 
 	// Apply flags.
 	utils.SetNodeConfig(ctx, &cfg.Node)
+	// 创建一个新的节点
 	stack, err := node.New(&cfg.Node)
 	if err != nil {
 		utils.Fatalf("Failed to create the protocol stack: %v", err)
 	}
+	// 将与 eth 相关的命令应用于配置
 	utils.SetEthConfig(ctx, stack, &cfg.Eth)
 	if ctx.GlobalIsSet(utils.EthStatsURLFlag.Name) {
 		cfg.Ethstats.URL = ctx.GlobalString(utils.EthStatsURLFlag.Name)
 	}
 
+	// 设置 ssh 配置
 	utils.SetShhConfig(ctx, stack, &cfg.Shh)
+	// 设置 dashboard 配置
 	utils.SetDashboardConfig(ctx, &cfg.Dashboard)
 
 	return stack, cfg
@@ -152,15 +159,20 @@ func enableWhisper(ctx *cli.Context) bool {
 	return false
 }
 
+// 创建一个节点
+// 创建一个节点，然后注册各种服务
 func makeFullNode(ctx *cli.Context) *node.Node {
+	// 根据配置创建 node
 	stack, cfg := makeConfigNode(ctx)
 
+	// 把以太坊客户端添加到 stack 中
 	utils.RegisterEthService(stack, &cfg.Eth)
 
 	if ctx.GlobalBool(utils.DashboardEnabledFlag.Name) {
 		utils.RegisterDashboardService(stack, &cfg.Dashboard)
 	}
 	// Whisper must be explicitly enabled by specifying at least 1 whisper flag or in dev mode
+	// whisper 主要用于加密通讯
 	shhEnabled := enableWhisper(ctx)
 	shhAutoEnabled := !ctx.GlobalIsSet(utils.WhisperEnabledFlag.Name) && ctx.GlobalIsSet(utils.DeveloperFlag.Name)
 	if shhEnabled || shhAutoEnabled {
@@ -170,6 +182,7 @@ func makeFullNode(ctx *cli.Context) *node.Node {
 		if ctx.GlobalIsSet(utils.WhisperMinPOWFlag.Name) {
 			cfg.Shh.MinimumAcceptedPOW = ctx.Float64(utils.WhisperMinPOWFlag.Name)
 		}
+		// 注册 ssh 服务
 		utils.RegisterShhService(stack, &cfg.Shh)
 	}
 

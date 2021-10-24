@@ -67,6 +67,7 @@ func init() {
 
 //go:generate gencodec -type Config -field-override configMarshaling -formats toml -out gen_config.go
 
+// 以太坊相关的配置
 type Config struct {
 	// The genesis block, which is inserted if the database is empty.
 	// If nil, the Ethereum main net block is used.

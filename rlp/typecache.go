@@ -24,10 +24,13 @@ import (
 )
 
 var (
+	// 独写锁，用来在多线程中保护typeCache
 	typeCacheMutex sync.RWMutex
+	// 核心数据结构，保存的就是类型->编码/解码函数
 	typeCache      = make(map[typekey]*typeinfo)
 )
 
+// 存储对应的编码器和解码器函数
 type typeinfo struct {
 	decoder
 	writer
@@ -45,6 +48,7 @@ type tags struct {
 	ignored bool
 }
 
+// 类型
 type typekey struct {
 	reflect.Type
 	// the key must include the struct tags because they
@@ -56,8 +60,10 @@ type decoder func(*Stream, reflect.Value) error
 
 type writer func(reflect.Value, *encbuf) error
 
+// 传入类型，返回该类型的编码器或者解码器函数
 func cachedTypeInfo(typ reflect.Type, tags tags) (*typeinfo, error) {
 	typeCacheMutex.RLock()
+	// 获取函数信息
 	info := typeCache[typekey{typ, tags}]
 	typeCacheMutex.RUnlock()
 	if info != nil {
@@ -79,7 +85,10 @@ func cachedTypeInfo1(typ reflect.Type, tags tags) (*typeinfo, error) {
 	// put a dummmy value into the cache before generating.
 	// if the generator tries to lookup itself, it will get
 	// the dummy value and won't call itself recursively.
+	// 没找到
+	// 创建一个值填充类型的位子
 	typeCache[key] = new(typeinfo)
+	// genTypeInfo：生成对应类型的编码和解码器
 	info, err := genTypeInfo(typ, tags)
 	if err != nil {
 		// remove the dummy value if the generator fails
@@ -95,9 +104,14 @@ type field struct {
 	info  *typeinfo
 }
 
+// 结构体字段
 func structFields(typ reflect.Type) (fields []field, err error) {
+	// 遍历结构体中所有的字段
 	for i := 0; i < typ.NumField(); i++ {
+		// 该判断的条件针对的是所有导出的字段
+		// 这里的导出就是值首字母大写
 		if f := typ.Field(i); f.PkgPath == "" { // exported
+			// 解析结构体 tag
 			tags, err := parseStructTag(typ, i)
 			if err != nil {
 				return nil, err
@@ -105,6 +119,7 @@ func structFields(typ reflect.Type) (fields []field, err error) {
 			if tags.ignored {
 				continue
 			}
+			// 获取每一个类型的编码器或者解码器函数
 			info, err := cachedTypeInfo1(f.Type, tags)
 			if err != nil {
 				return nil, err
@@ -140,6 +155,7 @@ func parseStructTag(typ reflect.Type, fi int) (tags, error) {
 	return ts, nil
 }
 
+// 生成对应类型的编码/解码函数
 func genTypeInfo(typ reflect.Type, tags tags) (info *typeinfo, err error) {
 	info = new(typeinfo)
 	if info.decoder, err = makeDecoder(typ, tags); err != nil {

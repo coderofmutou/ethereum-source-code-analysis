@@ -39,6 +39,7 @@ var (
 // The DecodeRLP method should read one value from the given
 // Stream. It is not forbidden to read less or more, but it might
 // be confusing.
+// 定义一个 decoder 解码接口
 type Decoder interface {
 	DecodeRLP(*Stream) error
 }
@@ -175,6 +176,7 @@ var (
 	bigInt           = reflect.TypeOf(big.Int{})
 )
 
+// 创建解码器
 func makeDecoder(typ reflect.Type, tags tags) (dec decoder, err error) {
 	kind := typ.Kind()
 	switch {

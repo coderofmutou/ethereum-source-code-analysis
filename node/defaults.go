@@ -34,6 +34,7 @@ const (
 )
 
 // DefaultConfig contains reasonable default settings.
+// 节点默认配置
 var DefaultConfig = Config{
 	DataDir:     DefaultDataDir(),
 	HTTPPort:    DefaultHTTPPort,

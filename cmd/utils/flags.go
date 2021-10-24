@@ -1054,13 +1054,16 @@ func SetDashboardConfig(ctx *cli.Context, cfg *dashboard.Config) {
 }
 
 // RegisterEthService adds an Ethereum client to the stack.
+// 通过 node 与 config 注册以太坊服务
 func RegisterEthService(stack *node.Node, cfg *eth.Config) {
 	var err error
+	// 判断要注册服务的配置节点是全节点还是轻节点
 	if cfg.SyncMode == downloader.LightSync {
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			return les.New(ctx, cfg)
 		})
 	} else {
+		// 全节点
 		err = stack.Register(func(ctx *node.ServiceContext) (node.Service, error) {
 			fullNode, err := eth.New(ctx, cfg)
 			if fullNode != nil && cfg.LightServ > 0 {

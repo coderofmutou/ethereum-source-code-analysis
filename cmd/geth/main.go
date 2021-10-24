@@ -142,11 +142,14 @@ var (
 	}
 )
 
+// geth 整体初始化
 func init() {
 	// Initialize the CLI app and start Geth
+	// 命令/行为，如果用户没有其它子命令，就调用这个字段指向的函数
 	app.Action = geth
 	app.HideVersion = true // we have a command to print the version
 	app.Copyright = "Copyright 2013-2017 The go-ethereum Authors"
+	// 所有支持的子命令
 	app.Commands = []cli.Command{
 		// See chaincmd.go:
 		initCommand,
@@ -173,28 +176,35 @@ func init() {
 		// See config.go
 		dumpConfigCommand,
 	}
+	// 通过 sort 函数为 cli 所有子命令基于首字母进行排序
 	sort.Sort(cli.CommandsByName(app.Commands))
 
+	// 所有能够解析的 options
 	app.Flags = append(app.Flags, nodeFlags...)
 	app.Flags = append(app.Flags, rpcFlags...)
 	app.Flags = append(app.Flags, consoleFlags...)
 	app.Flags = append(app.Flags, debug.Flags...)
 	app.Flags = append(app.Flags, whisperFlags...)
 
+	// 在所有命令执行之前调用的函数
 	app.Before = func(ctx *cli.Context) error {
+		// 设置用于当前程序的 CPU 上限
 		runtime.GOMAXPROCS(runtime.NumCPU())
 		if err := debug.Setup(ctx); err != nil {
 			return err
 		}
 		// Start system runtime metrics collection
+		// 启动专门监控协程收集正在运行的进程的各种指标， 3s 一次
 		go metrics.CollectProcessMetrics(3 * time.Second)
 
+		// 配置指定的网络(主网或者其它的测试网络)
 		utils.SetupNetwork(ctx)
 		return nil
 	}
 
 	app.After = func(ctx *cli.Context) error {
 		debug.Exit()
+		// 充值终端
 		console.Stdin.Close() // Resets terminal mode.
 		return nil
 	}
@@ -210,9 +220,15 @@ func main() {
 // geth is the main entry point into the system if no special subcommand is ran.
 // It creates a default node based on the command line arguments and runs it in
 // blocking mode, waiting for it to be shut down.
+// 如果没有指定其它子命令，那么 geth 就是默认的系统入口
+// 主要是根据提供的参数创建一个默认的节点
+// 以阻塞的方式来运行节点，直到节点被种植
 func geth(ctx *cli.Context) error {
+	// 创建一个节点
 	node := makeFullNode(ctx)
+	// 启动节点
 	startNode(ctx, node)
+	// 等待，知道节点停止
 	node.Wait()
 	return nil
 }
