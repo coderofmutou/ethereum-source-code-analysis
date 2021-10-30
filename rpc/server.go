@@ -88,13 +88,16 @@ func (s *Server) RegisterName(name string, rcvr interface{}) error {
 	if name == "" {
 		return fmt.Errorf("no service name for type %s", svc.typ.String())
 	}
+	// 如果实例的类名不是导出的(类名的首字母大写)，就返回错误。
 	if !isExported(reflect.Indirect(rcvrVal).Type().Name()) {
 		return fmt.Errorf("%s is not exported", reflect.Indirect(rcvrVal).Type().Name())
 	}
 
+	// 通过反射信息找到合适的 callbacks 和 subscriptions 方法
 	methods, subscriptions := suitableCallbacks(rcvrVal, svc.typ)
 
 	// already a previous service register under given sname, merge methods/subscriptions
+	// 如果这个名字当前已经被注册过了，那么如果有同名的方法就用新的替代，否则直接插入。
 	if regsvc, present := s.services[name]; present {
 		if len(methods) == 0 && len(subscriptions) == 0 {
 			return fmt.Errorf("Service %T doesn't have any suitable methods/subscriptions to expose", rcvr)
@@ -146,6 +149,8 @@ func (s *Server) serveRequest(codec ServerCodec, singleShot bool, options CodecO
 	// if the codec supports notification include a notifier that callbacks can use
 	// to send notification to clients. It is thight to the codec/connection. If the
 	// connection is closed the notifier will stop and cancels all active subscriptions.
+	// 如果 codec 支持, 可以通过一个叫 notifier 的对象执行回调函数发送消息给客户端。
+	// 他和 codec/connection 关系很紧密。 如果连接被关闭，那么 notifier 会关闭，并取消掉所有激活的订阅。
 	if options&OptionSubscriptions == OptionSubscriptions {
 		ctx = context.WithValue(ctx, notifierKey{}, newNotifier(codec))
 	}
@@ -167,6 +172,10 @@ func (s *Server) serveRequest(codec ServerCodec, singleShot bool, options CodecO
 				codec.Write(codec.CreateErrorResponse(nil, err))
 			}
 			// Error or end of stream, wait for requests and tear down
+			// Error or end of stream, wait for requests and tear down
+			// 这里主要是考虑多线程处理的时候等待所有的 request 处理完毕，
+			// 每启动一个 go 线程会调用 pend.Add(1)。
+			// 处理完成后调用 pend.Done() 会减去 1。当为 0 的时候，Wait() 方法就会返回
 			pend.Wait()
 			return nil
 		}
@@ -187,6 +196,7 @@ func (s *Server) serveRequest(codec ServerCodec, singleShot bool, options CodecO
 			return nil
 		}
 		// If a single shot request is executing, run and return immediately
+		// 如果只执行一次，那么执行完成后返回
 		if singleShot {
 			if batch {
 				s.execBatch(ctx, codec, reqs)
@@ -197,7 +207,7 @@ func (s *Server) serveRequest(codec ServerCodec, singleShot bool, options CodecO
 		}
 		// For multi-shot connections, start a goroutine to serve and loop back
 		pend.Add(1)
-
+		// 启动线程对请求进行服务
 		go func(reqs []*serverRequest, batch bool) {
 			defer pend.Done()
 			if batch {
@@ -258,7 +268,7 @@ func (s *Server) handle(ctx context.Context, codec ServerCodec, req *serverReque
 	if req.err != nil {
 		return codec.CreateErrorResponse(&req.id, req.err), nil
 	}
-
+	// 如果是取消订阅的消息。NotifierFromContext(ctx) 获取之前我们存入 ctx 的 notifier。
 	if req.isUnsubscribe { // cancel subscription, first param must be the subscription id
 		if len(req.args) >= 1 && req.args[0].Kind() == reflect.String {
 			notifier, supported := NotifierFromContext(ctx)
@@ -275,7 +285,7 @@ func (s *Server) handle(ctx context.Context, codec ServerCodec, req *serverReque
 		}
 		return codec.CreateErrorResponse(&req.id, &invalidParamsError{"Expected subscription id as first argument"}), nil
 	}
-
+	// 如果是订阅消息。 那么创建订阅。并激活订阅。
 	if req.callb.isSubscribe {
 		subid, err := s.createSubscription(ctx, codec, req)
 		if err != nil {
@@ -308,6 +318,7 @@ func (s *Server) handle(ctx context.Context, codec ServerCodec, req *serverReque
 	}
 
 	// execute RPC method and return result
+	// 调用提供的rpc方法，并获取reply
 	reply := req.callb.method.Func.Call(arguments)
 	if len(reply) == 0 {
 		return codec.CreateResponse(req.id, nil), nil
@@ -381,7 +392,7 @@ func (s *Server) readRequest(codec ServerCodec) ([]*serverRequest, bool, Error) 
 	}
 
 	requests := make([]*serverRequest, len(reqs))
-
+	// 根据 reqs 构建 requests
 	// verify requests
 	for i, r := range reqs {
 		var ok bool
@@ -391,7 +402,7 @@ func (s *Server) readRequest(codec ServerCodec) ([]*serverRequest, bool, Error) 
 			requests[i] = &serverRequest{id: r.id, err: r.err}
 			continue
 		}
-
+		// 如果请求是发送/订阅方面的请求，而且方法名称有 _unsubscribe 后缀。
 		if r.isPubSub && strings.HasSuffix(r.method, unsubscribeMethodSuffix) {
 			requests[i] = &serverRequest{id: r.id, isUnsubscribe: true}
 			argTypes := []reflect.Type{reflect.TypeOf("")} // expect subscription id as first arg
@@ -402,12 +413,12 @@ func (s *Server) readRequest(codec ServerCodec) ([]*serverRequest, bool, Error) 
 			}
 			continue
 		}
-
+		// 如果没有注册这个服务。
 		if svc, ok = s.services[r.service]; !ok { // rpc method isn't available
 			requests[i] = &serverRequest{id: r.id, err: &methodNotFoundError{r.service, r.method}}
 			continue
 		}
-
+		// 如果是发布和订阅模式。 调用订阅方法。
 		if r.isPubSub { // eth_subscribe, r.method contains the subscription method name
 			if callb, ok := svc.subscriptions[r.method]; ok {
 				requests[i] = &serverRequest{id: r.id, svcname: svc.name, callb: callb}

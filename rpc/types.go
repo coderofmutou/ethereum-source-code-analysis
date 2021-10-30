@@ -46,6 +46,7 @@ type callback struct {
 }
 
 // service represents a registered object
+// service 代表一个注册的对象
 type service struct {
 	name          string        // name for service
 	typ           reflect.Type  // receiver type

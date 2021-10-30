@@ -107,12 +107,18 @@ func (msg *jsonrpcMessage) String() string {
 // Client represents a connection to an RPC server.
 type Client struct {
 	idCounter   uint32
+	// 生成连接的函数，客户端会调用这个函数生成一个网络连接对象
 	connectFunc func(ctx context.Context) (net.Conn, error)
+	// HTTP 协议和非 HTTP 协议有不同的处理流程， HTTP 协议不支持长连接，
+	// 只支持一个请求对应一个回应的这种模式，同时也不支持发布/订阅模式。
 	isHTTP      bool
 
 	// writeConn is only safe to access outside dispatch, with the
 	// write lock held. The write lock is taken by sending on
 	// requestOp and released by sending on sendDone.
+	// 通过这里的注释可以看到，writeConn 是用来写入请求的网络连接对象，
+	// 只有在 dispatch 方法外面调用才是安全的，而且需要通过给 requestOp 队列发送请求来获取锁，
+	// 获取锁之后就可以把请求写入网络，写入完成后发送请求给 sendDone 队列来释放锁，供其它的请求使用。
 	writeConn net.Conn
 
 	// for dispatch
@@ -237,6 +243,8 @@ func (c *Client) Close() {
 //
 // The result must be a pointer so that package json can unmarshal into it. You
 // can also pass nil, in which case the result is ignored.
+// 返回值必须是一个指针，这样才能把 json 值转换成对象。
+// 如果你不关心返回值，也可以通过传 nil 来忽略。
 func (c *Client) Call(result interface{}, method string, args ...interface{}) error {
 	ctx := context.Background()
 	return c.CallContext(ctx, result, method, args...)
@@ -252,6 +260,7 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 	if err != nil {
 		return err
 	}
+	// 构建了一个 requestOp 对象。 resp 是读取返回的队列，队列的长度是 1
 	op := &requestOp{ids: []json.RawMessage{msg.ID}, resp: make(chan *jsonrpcMessage, 1)}
 
 	if c.isHTTP {
@@ -371,6 +380,10 @@ func (c *Client) ShhSubscribe(ctx context.Context, channel interface{}, args ...
 // before considering the subscriber dead. The subscription Err channel will receive
 // ErrSubscriptionQueueOverflow. Use a sufficiently large buffer on the channel or ensure
 // that the channel usually has at least one reader to prevent this issue.
+// Subscribe 会使用传入的参数调用 "<namespace>_subscribe" 方法来订阅指定的消息。
+// 服务器的通知会写入 channel 参数指定的队列。 channel 参数必须和返回的类型相同。
+// ctx 参数可以用来取消 RPC 的请求，但是如果订阅已经完成就不会有效果了。
+// 处理速度太慢的订阅者的消息会被删除，每个客户端有 8000 个消息的缓存。
 func (c *Client) Subscribe(ctx context.Context, namespace string, channel interface{}, args ...interface{}) (*ClientSubscription, error) {
 	// Check type of channel first.
 	chanVal := reflect.ValueOf(channel)
@@ -388,6 +401,7 @@ func (c *Client) Subscribe(ctx context.Context, namespace string, channel interf
 	if err != nil {
 		return nil, err
 	}
+	// requestOp 的参数和 Call 调用的不一样。 多了一个参数 sub.
 	op := &requestOp{
 		ids:  []json.RawMessage{msg.ID},
 		resp: make(chan *jsonrpcMessage),
@@ -429,6 +443,7 @@ func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error
 		// subscription notifications.
 		return ctx.Err()
 	case <-c.didQuit:
+		// 已经退出，可能被调用了 Close
 		return ErrClientQuit
 	}
 }
@@ -503,6 +518,7 @@ func (c *Client) dispatch(conn net.Conn) {
 
 		// Read path.
 		case batch := <-c.readResp:
+			// 读取到一个回应。调用相应的方法处理
 			for _, msg := range batch {
 				switch {
 				case msg.isNotification():
@@ -524,18 +540,22 @@ func (c *Client) dispatch(conn net.Conn) {
 			}
 
 		case err := <-c.readErr:
+			// 接收到读取失败信息，这个是 read 线程传递过来的
 			log.Debug(fmt.Sprintf("<-readErr: %v", err))
 			c.closeRequestOps(err)
 			conn.Close()
 			reading = false
 
 		case newconn := <-c.reconnected:
+			// 接收到一个重连接信息
 			log.Debug(fmt.Sprintf("<-reconnected: (reading=%t) %v", reading, conn.RemoteAddr()))
 			if reading {
 				// Wait for the previous read loop to exit. This is a rare case.
+				// 等待之前的连接读取完成
 				conn.Close()
 				<-c.readErr
 			}
+			// 开启阅读的 goroutine
 			go c.read(newconn)
 			reading = true
 			conn = newconn
@@ -543,6 +563,8 @@ func (c *Client) dispatch(conn net.Conn) {
 		// Send path.
 		case op := <-requestOpLock:
 			// Stop listening for further send ops until the current one is done.
+			// 接收到一个 requestOp 消息，那么设置 requestOpLock 为空，
+			// 这个时候如果有其他人也希望发送 op 到 requestOp，会因为没有人处理而阻塞。
 			requestOpLock = nil
 			lastOp = op
 			for _, id := range op.ids {
@@ -550,15 +572,19 @@ func (c *Client) dispatch(conn net.Conn) {
 			}
 
 		case err := <-c.sendDone:
+			// 当 op 的请求信息已经发送到网络上。会发送信息到 sendDone。
+			// 如果发送过程出错，那么 err !=nil。
 			if err != nil {
 				// Remove response handlers for the last send. We remove those here
 				// because the error is already handled in Call or BatchCall. When the
 				// read loop goes down, it will signal all other current operations.
+				// 把所有的 id 从等待队列删除
 				for _, id := range lastOp.ids {
 					delete(c.respWait, string(id))
 				}
 			}
 			// Listen for send ops again.
+			// 重新开始处理 requestOp 的消息。
 			requestOpLock = c.requestOp
 			lastOp = nil
 		}
@@ -611,6 +637,7 @@ func (c *Client) handleResponse(msg *jsonrpcMessage) {
 	}
 	delete(c.respWait, string(msg.ID))
 	// For normal responses, just forward the reply to Call/BatchCall.
+	// 如果 op.sub 是 nil，普通的 RPC 请求，这个字段的值是空白的，只有订阅请求才有值。
 	if op.sub == nil {
 		op.resp <- msg
 		return
@@ -623,6 +650,7 @@ func (c *Client) handleResponse(msg *jsonrpcMessage) {
 		op.err = msg.Error
 		return
 	}
+	// 启动一个新的 goroutine 并把 op.sub.subid 记录起来。
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
 		go op.sub.start()
 		c.subs[op.sub.subid] = op.sub
