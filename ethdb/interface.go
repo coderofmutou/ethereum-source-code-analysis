@@ -28,7 +28,7 @@ type Putter interface {
 }
 
 // Database wraps all database operations. All methods are safe for concurrent use.
-// 并发安全的数据库操作接口
+// 数据库接口定义了所有的数据库操作， 所有的方法都是多线程安全的。
 type Database interface {
 	Putter
 	Get(key []byte) ([]byte, error)
@@ -40,7 +40,7 @@ type Database interface {
 
 // Batch is a write-only database that commits changes to its host database
 // when Write is called. Batch cannot be used concurrently.
-// 批量操作，不能并发操作
+// 批量操作，不能并发操作，当 Write 方法被调用的时候，数据库会提交写入的更改
 type Batch interface {
 	Putter
 	ValueSize() int // amount of data in the batch

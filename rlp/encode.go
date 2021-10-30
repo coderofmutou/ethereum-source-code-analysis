@@ -138,7 +138,9 @@ type encbuf struct {
 }
 
 type listhead struct {
+	// 记录了列表数据在 str 字段的哪个位置
 	offset int // index of this header in string data
+	// 记录了包含列表头的编码后的数据的总长度
 	size   int // total size of encoded data (including list headers)
 }
 
@@ -231,6 +233,8 @@ func (w *encbuf) list() *listhead {
 }
 
 func (w *encbuf) listEnd(lh *listhead) {
+	// lh.size 记录了 list 开始的时候的队列头应该占用的长度
+	// w.size() 返回的是 str 的长度加上 lhsize
 	lh.size = w.size() - lh.offset - lh.size
 	if lh.size < 56 {
 		w.lhsize += 1 // length encoded into kind tag
@@ -243,7 +247,7 @@ func (w *encbuf) size() int {
 	return len(w.str) + w.lhsize
 }
 
-// encbud 处理逻辑，主要是将数据组装成完成的 RLP 数据
+// encbuf 处理逻辑，主要是将数据组装成完成的 RLP 数据
 func (w *encbuf) toBytes() []byte {
 	out := make([]byte, w.size())
 	strpos := 0
@@ -552,6 +556,8 @@ func makeStructWriter(typ reflect.Type) (writer, error) {
 	writer := func(val reflect.Value, w *encbuf) error {
 		lh := w.list()
 		for _, f := range fields {
+			// f 是 field 结构， f.info 是 typeinfo 的指针，
+			// 所以这里其实是调用字段的编码器方法。
 			if err := f.info.writer(val.Field(f.index), w); err != nil {
 				return err
 			}

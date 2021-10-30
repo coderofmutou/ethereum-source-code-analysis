@@ -62,14 +62,20 @@ type writer func(reflect.Value, *encbuf) error
 
 // 传入类型，返回该类型的编码器或者解码器函数
 func cachedTypeInfo(typ reflect.Type, tags tags) (*typeinfo, error) {
+	// 加读锁来保护
 	typeCacheMutex.RLock()
 	// 获取函数信息
 	info := typeCache[typekey{typ, tags}]
 	typeCacheMutex.RUnlock()
+	// 如果成功获取到信息，就返回
 	if info != nil {
 		return info, nil
 	}
 	// not in the cache, need to generate info for this type.
+	// 否则加写锁 调用 cachedTypeInfo1 函数创建并返回，
+	// 这里需要注意的是在多线程环境下有可能多个线程同时调用到这个地方，
+	// 所以当你进入 cachedTypeInfo1 方法的时候需要判断一下是否
+	// 已经被别的线程先创建成功了。
 	typeCacheMutex.Lock()
 	defer typeCacheMutex.Unlock()
 	return cachedTypeInfo1(typ, tags)
@@ -80,13 +86,15 @@ func cachedTypeInfo1(typ reflect.Type, tags tags) (*typeinfo, error) {
 	info := typeCache[key]
 	if info != nil {
 		// another goroutine got the write lock first
+		// 其他的线程可能已经创建成功了， 那么我们直接获取到信息然后返回
 		return info, nil
 	}
 	// put a dummmy value into the cache before generating.
 	// if the generator tries to lookup itself, it will get
 	// the dummy value and won't call itself recursively.
 	// 没找到
-	// 创建一个值填充类型的位子
+	// 这个地方首先创建了一个值来填充这个类型的位置，
+	// 避免遇到一些递归定义的数据类型形成死循环
 	typeCache[key] = new(typeinfo)
 	// genTypeInfo：生成对应类型的编码和解码器
 	info, err := genTypeInfo(typ, tags)
