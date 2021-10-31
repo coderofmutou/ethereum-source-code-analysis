@@ -23,53 +23,64 @@ import (
 )
 
 // ContractRef is a reference to the contract's backing object
+// ContractRef 是对合约支持对象的引用
 type ContractRef interface {
 	Address() common.Address
 }
 
 // AccountRef implements ContractRef.
-//
+// AccountRef 实现 ContractRef。
 // Account references are used during EVM initialisation and
 // it's primary use is to fetch addresses. Removing this object
 // proves difficult because of the cached jump destinations which
 // are fetched from the parent contract (i.e. the caller), which
 // is a ContractRef.
+// 在 EVM 初始化期间使用帐户引用，它的主要用途是获取地址。
+// 由于从父合约（即调用方）获取的缓存跳转目标是 ContractRef，因此删除此对象很困难。
 type AccountRef common.Address
 
 // Address casts AccountRef to a Address
+// Address 将 AccountRef 转换为Address
 func (ar AccountRef) Address() common.Address { return (common.Address)(ar) }
 
 // Contract represents an ethereum contract in the state database. It contains
 // the the contract code, calling arguments. Contract implements ContractRef
+// Contract 代表状态数据库中的以太坊合约。 它包含合约代码，调用参数。 Contract 实现 ContractRef
 type Contract struct {
 	// CallerAddress is the result of the caller which initialised this
 	// contract. However when the "call method" is delegated this value
 	// needs to be initialised to that of the caller's caller.
+	// CallerAddress 是初始化这个合约的人。 如果是 delegate，这个值被设置为调用者的调用者。
 	CallerAddress common.Address
 	caller        ContractRef
 	self          ContractRef
-
+	// JUMPDEST 指令的分析
 	jumpdests destinations // result of JUMPDEST analysis.
-
+	//  代码
 	Code     []byte
+	// 代码的 HASH
 	CodeHash common.Hash
+	// 代码地址
 	CodeAddr *common.Address
+	// 输入参数
 	Input    []byte
-
+	// 合约还有多少 Gas
 	Gas   uint64
 	value *big.Int
-
+	// 好像没有使用
 	Args []byte
 
 	DelegateCall bool
 }
 
 // NewContract returns a new contract environment for the execution of EVM.
+// NewContract 返回一个新的合约环境来执行 EVM。
 func NewContract(caller ContractRef, object ContractRef, value *big.Int, gas uint64) *Contract {
 	c := &Contract{CallerAddress: caller.Address(), caller: caller, self: object, Args: nil}
 
 	if parent, ok := caller.(*Contract); ok {
 		// Reuse JUMPDEST analysis from parent context if available.
+		// 如果 caller 是一个合约，说明是合约调用了我们。 jumpdests 设置为 caller 的 jumpdests
 		c.jumpdests = parent.jumpdests
 	} else {
 		c.jumpdests = make(destinations)

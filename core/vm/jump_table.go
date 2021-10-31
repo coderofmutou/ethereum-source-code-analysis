@@ -34,19 +34,29 @@ var errGasUintOverflow = errors.New("gas uint64 overflow")
 
 type operation struct {
 	// op is the operation function
+	// 执行函数
 	execute executionFunc
 	// gasCost is the gas function and returns the gas required for execution
+	// gas 消耗函数
 	gasCost gasFunc
 	// validateStack validates the stack (size) for the operation
+	// 堆栈大小验证函数
 	validateStack stackValidationFunc
 	// memorySize returns the memory size required for the operation
+	// 需要的内存大小
 	memorySize memorySizeFunc
 
+	// 表示操作是否停止进一步执行
 	halts   bool // indicates whether the operation should halt further execution
+	// 指示程序计数器是否不增加
 	jumps   bool // indicates whether the program counter should not increment
+	// 确定这是否是一个状态修改操作
 	writes  bool // determines whether this a state modifying operation
+	// 指示检索到的操作是否有效并且已知
 	valid   bool // indication whether the retrieved operation is valid and known
+	// 确定操作是否恢复状态（隐式停止）
 	reverts bool // determines whether the operation reverts state (implicitly halts)
+	// 确定操作是否设置了返回数据内容
 	returns bool // determines whether the operations sets the return data content
 }
 

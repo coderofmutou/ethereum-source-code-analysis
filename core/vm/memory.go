@@ -32,12 +32,16 @@ func NewMemory() *Memory {
 func (m *Memory) Set(offset, size uint64, value []byte) {
 	// length of store may never be less than offset + size.
 	// The store should be resized PRIOR to setting the memory
+	// store 的长度永远不能小于 offset + size。
+	// 应该在设置内存之前调整存储的大小
 	if size > uint64(len(m.store)) {
 		panic("INVALID memory: store empty")
 	}
 
 	// It's possible the offset is greater than 0 and size equals 0. This is because
 	// the calcMemSize (common.go) could potentially return 0 when size is zero (NO-OP)
+	// 有可能 offset 大于 0 并且 size 等于 0。这是因为
+	// 当 size 为零时，calcMemSize (common.go) 可能返回 0 (NO-OP)
 	if size > 0 {
 		copy(m.store[offset:offset+size], value)
 	}

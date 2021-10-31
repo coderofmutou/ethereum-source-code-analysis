@@ -24,6 +24,9 @@ import (
 // stack is an object for basic stack operations. Items popped to the stack are
 // expected to be changed and modified. stack does not take care of adding newly
 // initialised objects.
+// stack 是一个用于基本堆栈操作的对象。
+// 弹出到堆栈的项目预计会被更改和修改。
+// stack 不负责添加新初始化的对象。
 type Stack struct {
 	data []*big.Int
 }
@@ -36,6 +39,7 @@ func (st *Stack) Data() []*big.Int {
 	return st.data
 }
 
+// 追加到最末尾
 func (st *Stack) push(d *big.Int) {
 	// NOTE push limit (1024) is checked in baseCheck
 	//stackItem := new(big.Int).Set(d)
@@ -46,6 +50,7 @@ func (st *Stack) pushN(ds ...*big.Int) {
 	st.data = append(st.data, ds...)
 }
 
+// 从最末尾取出。
 func (st *Stack) pop() (ret *big.Int) {
 	ret = st.data[len(st.data)-1]
 	st.data = st.data[:len(st.data)-1]
@@ -56,23 +61,28 @@ func (st *Stack) len() int {
 	return len(st.data)
 }
 
+// 交换堆栈顶的元素和离栈顶 n 距离的元素的值
 func (st *Stack) swap(n int) {
 	st.data[st.len()-n], st.data[st.len()-1] = st.data[st.len()-1], st.data[st.len()-n]
 }
 
+// 复制指定位置的值到堆顶
 func (st *Stack) dup(pool *intPool, n int) {
 	st.push(pool.get().Set(st.data[st.len()-n]))
 }
 
+// 查看栈顶元素
 func (st *Stack) peek() *big.Int {
 	return st.data[st.len()-1]
 }
 
 // Back returns the n'th item in stack
+// 查看指定位置的元素
 func (st *Stack) Back(n int) *big.Int {
 	return st.data[st.len()-n-1]
 }
 
+// 保证堆栈元素的数量要大于等于 n
 func (st *Stack) require(n int) error {
 	if st.len() < n {
 		return fmt.Errorf("stack underflow (%d <=> %d)", len(st.data), n)
