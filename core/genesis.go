@@ -43,6 +43,7 @@ var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
 // Genesis specifies the header fields, state of a genesis block. It also defines hard
 // fork switch-over blocks through the chain configuration.
+// Genesis 指定 header 的字段，起始块的状态。 它还通过配置来定义硬叉切换块。
 type Genesis struct {
 	Config     *params.ChainConfig `json:"config"`
 	Nonce      uint64              `json:"nonce"`
@@ -62,6 +63,7 @@ type Genesis struct {
 }
 
 // GenesisAlloc specifies the initial state that is part of the genesis block.
+// GenesisAlloc 指定了最开始的区块的初始状态
 type GenesisAlloc map[common.Address]GenesisAccount
 
 func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
@@ -77,6 +79,7 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 }
 
 // GenesisAccount is an account in the state of the genesis block.
+// GenesisAccount 是处于创世区块状态的账户。
 type GenesisAccount struct {
 	Code       []byte                      `json:"code,omitempty"`
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
@@ -137,6 +140,7 @@ func (e *GenesisMismatchError) Error() string {
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
+// SetupGenesisBlock 写入或更新 db 中的创世块。
 // The block that will be used is:
 //
 //                          genesis == nil       genesis != nil
@@ -147,22 +151,28 @@ func (e *GenesisMismatchError) Error() string {
 // The stored chain configuration will be updated if it is compatible (i.e. does not
 // specify a fork block below the local head block). In case of a conflict, the
 // error is a *params.ConfigCompatError and the new, unwritten config is returned.
-//
+// 如果存储的区块链配置不兼容那么会被更新。为了避免发生冲突，
+// 会返回一个错误，并且新的配置和原来的配置会返回。
 // The returned chain configuration is never nil.
+// genesis 如果是 testnet dev 或者是 rinkeby 模式， 那么不为 nil。
+// 如果是 mainnet 或者是私有链接。那么为空
 func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllEthashProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
 
 	// Just commit the new block if there is no stored genesis block.
+	// 获取 genesis 对应的区块
 	stored := GetCanonicalHash(db, 0)
-	// 获取哈希
+	// 如果没有区块 最开始启动 geth 会进入这里
 	if (stored == common.Hash{}) {
 		if genesis == nil {
 			log.Info("Writing default main-net genesis block")
-			// 如果genesis为空，这里采用默认的genesis，使用的是主网络
+			// 如果 genesis 为空，这里采用默认的 genesis，使用的是主网络
+			// 如果是 test  dev  rinkeby 那么 genesis 不为空 会设置为各自的 genesis
 			genesis = DefaultGenesisBlock()
 		} else {
+			// 否则使用配置的区块
 			log.Info("Writing custom genesis block")
 		}
 		// 写入数据库
@@ -171,6 +181,7 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 	}
 
 	// Check whether the genesis block is already written.
+	// 获取当前存在的区块链的 genesis 配置
 	if genesis != nil {
 		block, _ := genesis.ToBlock()
 		hash := block.Hash()
@@ -195,20 +206,25 @@ func SetupGenesisBlock(db ethdb.Database, genesis *Genesis) (*params.ChainConfig
 	// Special case: don't change the existing config of a non-mainnet chain if no new
 	// config is supplied. These chains would get AllProtocolChanges (and a compat error)
 	// if we just continued here.
+	// 特殊情况：如果没有提供新的配置，请不要更改非主网链的现有配置。
+	// 如果我们继续这里，这些链会得到 AllProtocolChanges（和compat错误）。
 	if genesis == nil && stored != params.MainnetGenesisHash {
 		return storedcfg, stored, nil
 	}
 
 	// Check config compatibility and write the config. Compatibility errors
 	// are returned to the caller unless we're already at block zero.
+	// 检查配置的兼容性，除非我们在区块 0，否则返回兼容性错误。
 	height := GetBlockNumber(db, GetHeadHeaderHash(db))
 	if height == missingNumber {
 		return newcfg, stored, fmt.Errorf("missing block number for head header hash")
 	}
 	compatErr := storedcfg.CheckCompatible(newcfg, height)
+	// 如果区块已经写入数据了,那么就不能更改 genesis 配置了
 	if compatErr != nil && height != 0 && compatErr.RewindTo != 0 {
 		return newcfg, stored, compatErr
 	}
+	// 如果是主网络会从这里退出。
 	return newcfg, stored, WriteChainConfig(db, stored, newcfg)
 }
 
@@ -273,18 +289,23 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	if _, err := statedb.CommitTo(db, false); err != nil {
 		return nil, fmt.Errorf("cannot write state: %v", err)
 	}
+	// 写入总难度
 	if err := WriteTd(db, block.Hash(), block.NumberU64(), g.Difficulty); err != nil {
 		return nil, err
 	}
+	// 写入区块
 	if err := WriteBlock(db, block); err != nil {
 		return nil, err
 	}
+	// 写入区块收据
 	if err := WriteBlockReceipts(db, block.Hash(), block.NumberU64(), nil); err != nil {
 		return nil, err
 	}
+	// 写入   headerPrefix + num (uint64 big endian) + numSuffix -> hash
 	if err := WriteCanonicalHash(db, block.Hash(), block.NumberU64()); err != nil {
 		return nil, err
 	}
+	// 写入  "LastBlock" -> hash
 	if err := WriteHeadBlockHash(db, block.Hash()); err != nil {
 		return nil, err
 	}
@@ -295,6 +316,7 @@ func (g *Genesis) Commit(db ethdb.Database) (*types.Block, error) {
 	if config == nil {
 		config = params.AllEthashProtocolChanges
 	}
+	// 写入 ethereum-config-hash -> config
 	return block, WriteChainConfig(db, block.Hash(), config)
 }
 
